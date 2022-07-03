@@ -16,7 +16,7 @@ $ ./run_champsim.sh [BINARY] [N_WARM] [N_SIM] [TRACE] [OPTION]
 Ex:
 $ ./run_champsim.sh bimodal-no-no-no-no-ucp-1core 1 10 400.perlbench-41B.champsimtrace.xz
 for 4 core:
-$ ./run_champsim.sh bimodal-no-no-no-no-ucp-4core 1 100 400.perlbench-41B.champsimtrace.xz perlbench-41B.champsimtrace.xz perlbench-41B.champsimtrace.xz perlbench-41B.champsimtrace.xz
+$ ./run_4core.sh bimodal-no-no-no-no-ucp-4core 1 100 400.perlbench-41B.champsimtrace.xz perlbench-41B.champsimtrace.xz perlbench-41B.champsimtrace.xz perlbench-41B.champsimtrace.xz
 ```
 
 <p align="center">
