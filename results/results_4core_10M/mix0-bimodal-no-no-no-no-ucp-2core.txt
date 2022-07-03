@@ -1,0 +1,13 @@
+for cpu[0] number of ways alloted is/are = 8
+for cpu[1] number of ways alloted is/are = 8
+
+*** ChampSim Multicore Out-of-Order Simulator ***
+
+Warmup Instructions: 1000000
+Simulation Instructions: 10000000
+Number of CPUs: 2
+LLC sets: 4096
+LLC ways: 16
+Off-chip DRAM Size: 4096 MB Channels: 1 Width: 64-bit Data Rate: 3200 MT/s
+
+bimodal-no-no-no-no-ucp-2core: src/main.cc:675: int main(int, char**): Assertion `0' failed.

@@ -1,0 +1,251 @@
+#include "cache.h"
+
+// initialize replacement state
+void CACHE::llc_initialize_replacement()
+{
+
+}
+
+// find replacement victim
+uint32_t CACHE::llc_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type)
+{
+    // baseline LRU
+    return lru_victim(cpu, instr_id, set, current_set, ip, full_addr, type); 
+}
+
+// called on every cache hit and cache fill
+void CACHE::llc_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t way, uint64_t full_addr, uint64_t ip, uint64_t victim_addr, uint32_t type, uint8_t hit)
+{
+    string TYPE_NAME;
+    if (type == LOAD)
+        TYPE_NAME = "LOAD";
+    else if (type == RFO)
+        TYPE_NAME = "RFO";
+    else if (type == PREFETCH)
+        TYPE_NAME = "PF";
+    else if (type == WRITEBACK)
+        TYPE_NAME = "WB";
+    else
+        assert(0);
+
+    if (hit)
+        TYPE_NAME += "_HIT";
+    else
+        TYPE_NAME += "_MISS";
+
+    if ((type == WRITEBACK) && ip)
+        assert(0);
+
+    // uncomment this line to see the LLC accesses
+    // cout << "CPU: " << cpu << "  LLC " << setw(9) << TYPE_NAME << " set: " << setw(5) << set << " way: " << setw(2) << way;
+    // cout << hex << " paddr: " << setw(12) << paddr << " ip: " << setw(8) << ip << " victim_addr: " << victim_addr << dec << endl;
+
+    // baseline LRU
+    if (hit && (type == WRITEBACK)) // writeback hit does not update LRU state
+        return;
+
+    return lru_update(set, way,cpu,full_addr);
+}
+
+void CACHE::llc_replacement_final_stats()
+{
+
+}
+
+
+
+void CACHE::atd_replacement(uint32_t cpu,uint32_t set, uint64_t tag){   //it implements ATD and hit counters
+    uint32_t way = 0;
+    for (way=0; way<NUM_WAY; way++) {
+        if (umon[cpu][set][way].valid == true && umon[cpu][set][way].tag==tag){
+            break;
+        }
+    }
+    if(way==NUM_WAY){
+        way = umon_lru_victim(cpu,set,tag);
+        umon[cpu][set][way].tag = tag;
+        umon[cpu][set][way].valid = true;
+    }
+    else{
+        umons_counts[cpu][umon[cpu][set][way].lru] +=1;
+    }
+    umon_lru_updat(cpu,set,way);
+     
+}
+
+uint32_t CACHE::umon_lru_victim(uint32_t cpu,uint32_t set, uint64_t full_addr){  //finds victim for ATD
+    uint32_t way = 0;
+    for (way=0; way<NUM_WAY; way++) 
+        if (umon[cpu][set][way].valid == false) {
+            umon[cpu][set][way].lru = NUM_WAY;
+            break;
+        }
+    if (way == NUM_WAY) 
+        for (way=0; way<NUM_WAY; way++) 
+            if (umon[cpu][set][way].lru == NUM_WAY-1) 
+                break;
+
+    if (way == NUM_WAY) {
+        cout<<full_addr<<endl;
+        print_umon(cpu,set);
+        cout<<endl;
+        cerr << "[" << NAME << "] " << __func__ << " no victim in umon! set: " << set << endl;
+        assert(0);
+        }
+    return way;
+}
+
+void CACHE::umon_lru_updat(uint32_t cpu,uint32_t set, uint32_t way){           //It updates LRU of ATD hit
+    // update lru replacement state
+    for (uint32_t i=0; i<NUM_WAY; i++) {
+        if (umon[cpu][set][i].lru < umon[cpu][set][way].lru) {
+            umon[cpu][set][i].lru++;
+        }
+    }
+    umon[cpu][set][way].lru = 0; 
+}
+
+void CACHE::print_part(){                //Prints partitions of CPU's
+    for(int i=0;i<NUM_CPUS;i++){
+        cout<<partitions[i]<<" ";
+    }
+    cout<<endl;
+}
+
+
+uint32_t CACHE::lru_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type){ // finds victim for CACHE
+    if(current_core_cycle[cpu]>=P_CYCLE*M5_count){
+        M5_count++;                                      //Counter to get time to update partitioning
+        //for(int i = 0;i<NUM_CPUS;i++){
+            //cout<<"cpu ["<<i<<"] : ";
+            //for(int j = 0;j<NUM_WAY;j++){
+            //    cout<<umons_counts[i][j]<<" ";
+            //}
+            //cout<<endl;
+        //}
+        get_new_part(NUM_CPUS,NUM_WAY);
+        cout<<"final partition updated to : ";
+        print_part();
+    }
+    uint16_t * temppar = (uint16_t*)malloc(NUM_CPUS*(sizeof(uint16_t)));
+    for (uint32_t i=0; i<NUM_CPUS; i++) {
+        temppar[i]=0;
+    }
+    for (uint32_t way=0; way<NUM_WAY; way++) {
+        temppar[block[set][way].cpu]+=1;             //Getting current partition
+    }
+    if(temppar[cpu]<partitions[cpu]){ //changing the current partition if needed
+        for(int i = 0;i<NUM_CPUS;i++){
+            if(temppar[i]>partitions[i]){
+                int way = lru_victim_llc(i, instr_id, set, current_set, ip, full_addr, type,temppar);
+                block[set][way].valid = false;
+                block[set][way].cpu = cpu;
+                block[set][way].lru = partitions[cpu];
+                temppar[cpu]+=1;
+                temppar[i]-=1;
+                break;
+            }
+        }
+    }
+    
+    uint32_t victim =  lru_victim_llc(cpu, instr_id, set, current_set, ip, full_addr, type,temppar); //finding victim
+    free(temppar);
+    return victim;
+}
+
+
+uint32_t CACHE::lru_victim_llc(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type,uint16_t * temppar)
+{ //finding victim in llc
+uint32_t way = 0;
+
+    for (way=0; way<NUM_WAY; way++) {//find invalid block
+        if (block[set][way].valid == false  && block[set][way].cpu==cpu) {
+            break;
+        }
+    }
+
+    if (way == NUM_WAY) { //find lru block
+        for (way=0; way<NUM_WAY; way++) {
+            if (block[set][way].lru == temppar[cpu]-1 && block[set][way].cpu==cpu) {
+                break;
+            }
+        }
+    }
+    if (way == NUM_WAY) {
+        cerr << "[" << NAME << "] " << __func__ << " no victim! set: " << set << endl;
+        assert(0);
+    }
+    return way;
+}
+
+
+
+void CACHE::lru_update(uint32_t set, uint32_t way, uint32_t cpu, uint32_t full_addr) //updating lru values in llc
+{
+    if(set%sampling==0 and set/sampling<test_sets){
+        atd_replacement(cpu,set/sampling,full_addr);
+    }
+    for (uint32_t i=0; i<NUM_WAY; i++) {
+        if (block[set][i].lru < block[set][way].lru && block[set][i].cpu==cpu) { //Check weather block belongs to same partition and need to be demoted
+            block[set][i].lru++;
+        }
+    }
+    block[set][way].lru = 0; // promote to the MRU position
+}
+
+
+void CACHE::print_umon(int cpu,uint32_t set){ //printing umon
+    for(int i = 0;i<NUM_WAY;i++){
+        cout<<umon[cpu][set][i].lru<<" "<<umon[cpu][set][i].tag<<" "<<(umon[cpu][set][i].valid==true)<<endl;
+    }
+}
+
+
+
+
+float CACHE::getmumax(int cpu, int current, int balance, int* breq){ //getting maximum marginal utility
+    float maxmu = 0;
+    float mu=0;
+    int man = 0;
+    breq[cpu] = 0;
+    for(int i = 1;i<=balance;i++){
+        man += umons_counts[cpu][current-1+i];
+        mu = (float)man/i;
+        // cout<<"mu = "<<mu<<endl;
+        // cout<<"man = "<<man<<"i = "<<i<<endl;
+        maxmu = (mu>=maxmu)?mu:maxmu;
+        breq[cpu] = (mu>=maxmu)?i:breq[cpu];
+    }
+    
+    return maxmu;
+}
+
+
+void CACHE::get_new_part(int cpus,int ways){ //changing partitioning using Lookahead algorithm
+    int balance = ways-cpus;
+    float max_mu[cpus];
+    int breq[cpus];
+    for(int i=0;i<cpus;i++){
+        partitions[i] = 1;
+    }
+    while(balance){
+        for(int i=0;i<cpus;i++){
+            int alloc = partitions[i];
+            max_mu[i] = getmumax(i,partitions[i],balance,breq); //getting maximum utility for cpu for current state
+        }
+        int win = 0;
+        for(int i=0;i<cpus;i++){
+            if(max_mu[i]>max_mu[win]){
+                win = i;
+            }
+        }
+        partitions[win]+=breq[win];
+        balance-=breq[win];
+    }
+    for(int i = 0;i<cpus;i++){
+            for(int way =0;way<NUM_WAY;way++ ){
+                umons_counts[i][way] /= 2;
+            }
+    }
+}
+
