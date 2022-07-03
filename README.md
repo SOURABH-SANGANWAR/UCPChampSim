@@ -1,4 +1,25 @@
 <p align="center">
+  <h1 align="center">UCP in ChampSim </h1>
+
+To Setup and Compile Champsim for multicore:
+
+# BUILD SIMULATOR
+```
+$ ./build_champsim.sh ${BRANCH} ${L1I_PREFETCHER} ${L1D_PREFETCHER} ${L2C_PREFETCHER} ${LLC_PREFETCHER} ${LLC_REPLACEMENT} ${NUM_CORE}
+Ex:
+$ ./build_champsim.sh bimodal no no no no ucp 1
+```
+
+# RUN SIMULATOR
+```
+$ ./run_champsim.sh [BINARY] [N_WARM] [N_SIM] [TRACE] [OPTION]
+Ex:
+$ ./run_champsim.sh bimodal-no-no-no-no-ucp-1core 1 10 400.perlbench-41B.champsimtrace.xz
+for 4 core:
+$ ./run_champsim.sh bimodal-no-no-no-no-ucp-4core 1 100 400.perlbench-41B.champsimtrace.xz perlbench-41B.champsimtrace.xz perlbench-41B.champsimtrace.xz perlbench-41B.champsimtrace.xz
+```
+
+<p align="center">
   <h1 align="center"> ChampSim </h1>
   <p> ChampSim is a trace-based simulator for a microarchitecture study. You can sign up to the public mailing list by sending an empty mail to champsim+subscribe@googlegroups.com. Traces for the 3rd Data Prefetching Championship (DPC-3) can be found from here (https://dpc3.compas.cs.stonybrook.edu/?SW_IS). A set of traces used for the 2nd Cache Replacement Championship (CRC-2) can be found from this link. (http://bit.ly/2t2nkUj) <p>
 </p>
